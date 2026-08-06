@@ -23,11 +23,12 @@
     <div id="root"></div>
 
     <div id="fx-fallback" style="display:none;position:fixed;inset:0;background:#0b0f14;color:#e6e9ee;font-family:Inter,system-ui,sans-serif;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;z-index:999999;">
-      <div style="max-width:420px;">
+      <div style="max-width:460px;">
         <div style="font-size:18px;font-weight:600;margin-bottom:8px;">FirexPanel couldn't load</div>
-        <div style="font-size:14px;color:#9aa4b2;margin-bottom:20px;line-height:1.5;">
+        <div style="font-size:14px;color:#9aa4b2;margin-bottom:16px;line-height:1.5;">
           This is usually a temporary loading issue, not a data problem — your saved accounts are safe and untouched.
         </div>
+        <pre id="fx-error-detail" style="display:none;text-align:left;background:#151b23;border:1px solid #2a333f;border-radius:8px;padding:12px;font-size:11px;color:#f2b8b5;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;margin-bottom:16px;"></pre>
         <button id="fx-retry-btn" style="background:#2f6fed;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;">
           Reload page
         </button>
@@ -36,17 +37,27 @@
 
     <script>
       // --- Render watchdog: shows a visible fallback instead of a silent
-      // black screen if the app fails to mount or throws during startup.
-      // Uses only in-memory state + sessionStorage (per-tab, cleared on
-      // close) for a single auto-retry — never touches localStorage.
+      // black screen if the app fails to mount or throws during startup,
+      // and surfaces the actual error text so it can be diagnosed from a
+      // screenshot. Uses only in-memory state + sessionStorage (per-tab,
+      // cleared on close) for a single auto-retry — never touches
+      // localStorage.
       (function () {
         var root = document.getElementById('root');
         var fallback = document.getElementById('fx-fallback');
+        var detailEl = document.getElementById('fx-error-detail');
         var shown = false;
 
-        function showFallback() {
+        function showFallback(detail) {
           if (shown) return;
           shown = true;
+          if (detail) {
+            detailEl.textContent = detail;
+            detailEl.style.display = 'block';
+          } else {
+            detailEl.textContent = 'No script error was captured — the app just did not finish rendering in time on this device/network.\nUA: ' + navigator.userAgent;
+            detailEl.style.display = 'block';
+          }
           fallback.style.display = 'flex';
         }
 
@@ -54,21 +65,31 @@
           window.location.reload();
         });
 
-        window.addEventListener('error', function () { showFallback(); });
-        window.addEventListener('unhandledrejection', function () { showFallback(); });
+        window.addEventListener('error', function (e) {
+          var msg = 'Error: ' + (e.message || 'unknown') +
+            '\nFile: ' + (e.filename || 'n/a') + ':' + (e.lineno || '?') + ':' + (e.colno || '?');
+          if (e.error && e.error.stack) msg += '\nStack: ' + e.error.stack;
+          showFallback(msg);
+        });
+
+        window.addEventListener('unhandledrejection', function (e) {
+          var reason = e.reason;
+          var msg = 'Unhandled promise rejection: ' +
+            (reason && reason.message ? reason.message : String(reason));
+          if (reason && reason.stack) msg += '\nStack: ' + reason.stack;
+          showFallback(msg);
+        });
 
         // If nothing has been rendered into #root within 6s, assume the
         // app failed silently (blocked script, unsupported browser, etc).
         setTimeout(function () {
           if (!root || root.childElementCount === 0) {
-            // Give a stale/blocked script one automatic silent retry per
-            // tab session before showing the manual fallback.
             var retried = sessionStorage.getItem('fx_auto_retried');
             if (!retried) {
               sessionStorage.setItem('fx_auto_retried', '1');
               window.location.reload();
             } else {
-              showFallback();
+              showFallback(null);
             }
           }
         }, 6000);
