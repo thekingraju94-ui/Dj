@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>FirexPanel</title>
+    <meta name="description" content="FirexPanel — built on Replit. Update this description to reflect the app." />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:title" content="FirexPanel" />
+    <meta property="og:description" content="FirexPanel — built on Replit. Update this description to reflect the app." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="FirexPanel" />
+    <meta name="twitter:description" content="FirexPanel — built on Replit. Update this description to reflect the app." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-CPbqVLDH.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dou2Vpxs.css">
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <div id="fx-fallback" style="display:none;position:fixed;inset:0;background:#0b0f14;color:#e6e9ee;font-family:Inter,system-ui,sans-serif;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;z-index:999999;">
+      <div style="max-width:420px;">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">FirexPanel couldn't load</div>
+        <div style="font-size:14px;color:#9aa4b2;margin-bottom:20px;line-height:1.5;">
+          This is usually a temporary loading issue, not a data problem — your saved accounts are safe and untouched.
+        </div>
+        <button id="fx-retry-btn" style="background:#2f6fed;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;">
+          Reload page
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // --- Render watchdog: shows a visible fallback instead of a silent
+      // black screen if the app fails to mount or throws during startup.
+      // Uses only in-memory state + sessionStorage (per-tab, cleared on
+      // close) for a single auto-retry — never touches localStorage.
+      (function () {
+        var root = document.getElementById('root');
+        var fallback = document.getElementById('fx-fallback');
+        var shown = false;
+
+        function showFallback() {
+          if (shown) return;
+          shown = true;
+          fallback.style.display = 'flex';
+        }
+
+        document.getElementById('fx-retry-btn').addEventListener('click', function () {
+          window.location.reload();
+        });
+
+        window.addEventListener('error', function () { showFallback(); });
+        window.addEventListener('unhandledrejection', function () { showFallback(); });
+
+        // If nothing has been rendered into #root within 6s, assume the
+        // app failed silently (blocked script, unsupported browser, etc).
+        setTimeout(function () {
+          if (!root || root.childElementCount === 0) {
+            // Give a stale/blocked script one automatic silent retry per
+            // tab session before showing the manual fallback.
+            var retried = sessionStorage.getItem('fx_auto_retried');
+            if (!retried) {
+              sessionStorage.setItem('fx_auto_retried', '1');
+              window.location.reload();
+            } else {
+              showFallback();
+            }
+          }
+        }, 6000);
+      })();
+    </script>
+
+    <script>
+      // Auto-heals stale deployments: periodically checks the live index.html
+      // for a newer build and reloads to pick it up. Only uses fetch() + a
+      // plain page reload — never touches localStorage/site data.
+      (function () {
+        var myScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
+        var myBuild = myScript ? myScript.getAttribute('src') : null;
+        if (!myBuild) return;
+
+        function checkForUpdate() {
+          fetch('/index.html?_=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+              var m = html.match(/\/assets\/index-[A-Za-z0-9]+\.js/);
+              if (m && m[0] !== myBuild) {
+                window.location.reload();
+              }
+            })
+            .catch(function () {});
+        }
+
+        setInterval(checkForUpdate, 60000);
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') checkForUpdate();
+        });
+      })();
+    </script>
+  </body>
+</html>
