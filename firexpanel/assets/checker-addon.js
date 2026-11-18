@@ -28,15 +28,12 @@
  *      in localStorage (key "firex_starred") so they survive reloads.
  *      A "Starred only" toggle shows only starred numbers, so at a glance
  *      you can tell which numbers are used (starred) and which are not.
- *   3. PER-ACCOUNT DATA + ACCOUNT SELECTOR (2026-11-18, user order) —
- *      stars and the active keyword are stored PER Firebase account (not
- *      globally): whatever account is logged in / open in the panel, its
- *      own stars and keyword apply, and switching accounts shows that
- *      account's own stars. A "Saved Firebase" selector sits beside the
- *      checker and lists every saved Firebase account; picking one
- *      switches the WHOLE panel to that account (via the panel's own
- *      share link, which now opens an already-saved account instead of
- *      dumping to the dashboard).
+ *   3. NO SELECTOR (2026-11-19, user order) — there is NO account
+ *      selector at all. The checker simply runs on whichever Firebase
+ *      is logged in right now in the panel, detected from the device
+ *      cards on screen (the card-match pick). No picker, no saved
+ *      choice, nothing to tap — log in to a Firebase and the checker
+ *      works on that one only.
  *
  * DATA FLOW (step by step)
  *   a. Accounts: read localStorage "flixy_accounts" (the panel's own key),
@@ -205,25 +202,6 @@
     try { localStorage.setItem(lsKey, JSON.stringify(map)); } catch (e) {}
   }
 
-  // Switch the WHOLE panel to another saved Firebase account. The panel
-  // is a React app whose state is not reachable from this addon, so the
-  // switch goes through the panel's own share link (?s=<base64>), which
-  // (after the 2026-11-18 fix) opens an already-saved account instead of
-  // dumping to the dashboard. The page reloads onto that account.
-  // Payload format is the panel's own: url|||key|||timestamp|||name
-  // (base64 — the FirexPanel encoding, NOT the ZXKAI XOR encoding).
-  // The choice is NOT saved: after the reload the checker re-detects
-  // the logged-in Firebase from the cards on screen, so a new login
-  // always wins over an old pick.
-  function switchToAccount(idx) {
-    var acct = state.accounts[idx];
-    if (!acct) return;
-    var payload = [acct.url, acct.key, String(Date.now()), acct.label].join("|||");
-    var encoded = "";
-    try { encoded = btoa(payload); } catch (e) { return; }
-    window.location.href = window.location.pathname + "?s=" + encoded;
-  }
-
   /* ------------------------------------------------------------------ */
   /* 5. Firebase reads — plain GETs, same endpoints the panel uses       */
   /* ------------------------------------------------------------------ */
@@ -381,8 +359,6 @@
     updateActivePill();
     updateCounts();
     decorateCards();
-    var sel = $("#fx-acc-select");
-    if (sel) sel.value = String(idx);
   }
 
   function readKeywordForCurrentAccount() {
@@ -587,31 +563,8 @@
     row.appendChild(starToggle);
     sec.appendChild(row);
 
-    // Saved-Firebase selector — ALWAYS shown when any account is saved
-    // (not only when several exist), sitting right beside the checker so
-    // the user can switch Firebase accounts without going back to the
-    // dashboard. Picking an account switches the WHOLE panel to it (via
-    // the panel's own share link — the page reloads onto that account),
-    // and that account's own stars + keyword then apply.
-    if (state.accounts.length >= 1) {
-      var accRow = el("div", "fx-checker-accrow");
-      accRow.appendChild(el("span", "fx-acc-label", "Saved Firebase:"));
-      var sel = el("select", "fx-acc-select");
-      sel.id = "fx-acc-select";
-      state.accounts.forEach(function (a, idx) {
-        var opt = el("option", "", a.label);
-        opt.value = String(idx);
-        sel.appendChild(opt);
-      });
-      sel.value = String(state.accountIndex);
-      sel.addEventListener("change", function () {
-        var idx = parseInt(sel.value, 10) || 0;
-        if (idx === state.accountIndex) return;
-        switchToAccount(idx);
-      });
-      accRow.appendChild(sel);
-      sec.appendChild(accRow);
-    }
+    // (No account selector here — user order 2026-11-19: the checker
+    // simply runs on whichever Firebase is logged in right now.)
 
     // Status line (progress / errors / hints).
     var status = el("div", "fx-checker-status", "");

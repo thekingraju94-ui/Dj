@@ -164,26 +164,6 @@
   background: rgba(245, 179, 1, 0.10);
 }
 
-/* Saved-Firebase selector — always shown when any account is saved,
-   sitting beside the checker so the user can switch accounts without
-   going back to the dashboard. */
-.fx-checker-accrow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.8rem;
-}
-.fx-acc-label { color: #777777; font-size: 0.8rem; font-weight: 700; }
-.fx-acc-select {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #eeeeee;
-  border-radius: 0.6rem;
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
-  font-family: inherit;
-}
-
 /* Status / progress line. */
 .fx-checker-status {
   color: #888888;
