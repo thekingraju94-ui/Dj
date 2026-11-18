@@ -537,16 +537,30 @@
     });
     sec.appendChild(presets);
 
-    // Custom search + Clear + starred-only toggle (one row).
+    // Custom search + Search button + Clear + starred-only toggle.
+    // The Search button is REQUIRED (2026-11-19 fix): the custom search
+    // used to work ONLY by pressing Enter, and on a phone the virtual
+    // keyboard's Enter/Go key does not reliably fire keydown Enter —
+    // so the custom keyword simply did nothing. Now there is a real
+    // button to tap, and Enter still works as well.
     var row = el("div", "fx-checker-row");
     var input = el("input", "fx-custom");
     input.id = "fx-checker-custom";
     input.type = "text";
     input.placeholder = "Or custom search";
+    input.setAttribute("enterkeyhint", "search");
     input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") runCheck(input.value);
+      if (e.key === "Enter" || e.keyCode === 13) {
+        e.preventDefault();
+        runCheck(input.value);
+      }
     });
     row.appendChild(input);
+    var go = el("button", "fx-go", "Search");
+    go.id = "fx-checker-go";
+    go.type = "button";
+    go.addEventListener("click", function () { runCheck(input.value); });
+    row.appendChild(go);
     var clear = el("button", "fx-clear", "Clear");
     clear.type = "button";
     clear.addEventListener("click", clearCheck);

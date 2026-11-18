@@ -147,6 +147,21 @@
   font-family: inherit;
 }
 .fx-clear:hover { background: rgba(255, 92, 92, 0.22); }
+/* Search button for the custom keyword (amber, like the checker header).
+   Without this button the custom search only worked via Enter, which a
+   phone keyboard does not reliably fire. */
+.fx-go {
+  background: #f5b301;
+  border: 1px solid #f5b301;
+  color: #111111;
+  border-radius: 9999px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fx-go:active { transform: translateY(1px); }
 .fx-star-toggle {
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
