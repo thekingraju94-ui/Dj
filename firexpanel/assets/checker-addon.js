@@ -119,6 +119,7 @@
     accountPicked: false,  // the panel's open account has been identified
     keyword: "",           // active keyword ("" = checker idle)
     checking: false,       // a scan is running right now
+    checkStartedAt: 0,     // when the current scan started (stuck-guard)
     progress: { done: 0, total: 0 },
     used: {},              // deviceId -> true  (keyword found in SMS)
     fresh: {},             // deviceId -> true  (no SMS matched)
@@ -412,10 +413,24 @@
       setStatusLine("Pehle panel me apna Firebase account connect karo.");
       return;
     }
-    if (state.checking) return; // one scan at a time
+    if (state.checking) {
+      // A scan is already running — but if it has been stuck for over
+      // 60s (a hung fetch that never settled), reset it and let the new
+      // tap start a fresh scan. Without this, one stuck scan made EVERY
+      // button do nothing forever ("pura checker toot gya") and the only
+      // fix was reloading the page. (2026-11-19 fix.)
+      if (Date.now() - (state.checkStartedAt || 0) > 60000) {
+        state.checking = false;
+        setStatusLine("Pichla scan atak gaya tha — dobara try kar raha hun…");
+      } else {
+        setStatusLine("Scan chal raha hai — thoda ruko…");
+        return;
+      }
+    }
     state.keyword = keyword;
     writeKeywordForCurrentAccount(keyword); // per-account, not global
     state.checking = true;
+    state.checkStartedAt = Date.now();
     state.used = {};
     state.fresh = {};
     updateActivePill();
@@ -455,6 +470,16 @@
             updateCounts();
             decorateCards();
             nextBatch();
+          })
+          .catch(function (err) {
+            // A batch must never leave the checker stuck: reset the flag
+            // and show a plain error so the next tap works again.
+            // (2026-11-19 fix — a rejected batch used to hang the whole
+            // checker with checking=true forever.)
+            state.checking = false;
+            setStatusLine("Scan ruk gaya: " + (err && err.message ? err.message : err) + " — dobara try karo.");
+            updateCounts();
+            decorateCards();
           });
       }
       nextBatch();
