@@ -1,0 +1,236 @@
+/* ============================================================================
+ * FirexPanel — Message Keyword Checker + number stars  (ADDON CSS, 2026-11-18)
+ * ----------------------------------------------------------------------------
+ * Styles for assets/checker-addon.js. Dark theme matched to the panel
+ * (near-black background, #111 cards, #1f1f1f borders) and to the
+ * screenshot the user sent: amber checker header, red USED pill, green
+ * FRESH pill, grey preset pills, red Clear button, yellow star.
+ * Every rule is namespaced with "fx-" so it cannot clash with the panel's
+ * own Tailwind classes.
+ * ========================================================================== */
+
+/* --- Checker section (sits above the numbers grid) ----------------------- */
+.fx-checker {
+  background: #111111;
+  border: 1px solid #1f1f1f;
+  border-radius: 1rem;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+/* Header row: amber circled check + title. */
+.fx-checker-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+.fx-checker-icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 2px solid #f5b301;
+  color: #f5b301;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.fx-checker-title {
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Active keyword pill (amber, like the screenshot). */
+.fx-checker-active {
+  display: inline-block;
+  color: #f5b301;
+  background: rgba(245, 179, 1, 0.12);
+  border: 1px solid rgba(245, 179, 1, 0.35);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 0.7rem;
+}
+
+/* USED / FRESH count pills. */
+.fx-checker-counts {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+}
+.fx-pill {
+  border-radius: 9999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+}
+.fx-used {
+  color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.12);
+  border-color: rgba(255, 92, 92, 0.35);
+}
+.fx-fresh {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+/* Preset pills. */
+.fx-checker-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+.fx-presets-label {
+  color: #777777;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.fx-preset {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #cccccc;
+  border-radius: 9999px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fx-preset:hover { border-color: #f5b301; color: #ffffff; }
+.fx-preset:active { transform: translateY(1px); }
+
+/* Custom search + Clear + starred-only toggle (one row). */
+.fx-checker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+.fx-custom {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #eeeeee;
+  border-radius: 9999px;
+  padding: 0.5rem 0.95rem;
+  font-size: 0.88rem;
+  font-family: inherit;
+  min-width: 11rem;
+  outline: none;
+}
+.fx-custom:focus { border-color: #f5b301; }
+.fx-custom::placeholder { color: #666666; }
+.fx-clear {
+  background: rgba(255, 92, 92, 0.12);
+  border: 1px solid rgba(255, 92, 92, 0.4);
+  color: #ff5c5c;
+  border-radius: 9999px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fx-clear:hover { background: rgba(255, 92, 92, 0.22); }
+.fx-star-toggle {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #cccccc;
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fx-star-toggle.fx-on {
+  color: #f5b301;
+  border-color: rgba(245, 179, 1, 0.5);
+  background: rgba(245, 179, 1, 0.10);
+}
+
+/* Account picker (only shown when several accounts are saved). */
+.fx-checker-accrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+.fx-acc-label { color: #777777; font-size: 0.8rem; font-weight: 700; }
+.fx-acc-select {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #eeeeee;
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+/* Status / progress line. */
+.fx-checker-status {
+  color: #888888;
+  font-size: 0.8rem;
+  margin-top: 0.7rem;
+  min-height: 1rem;
+}
+
+/* --- Card decoration ----------------------------------------------------- */
+
+/* USED / FRESH badge, inline after the device name (inside the <h3>). */
+.fx-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+.fx-badge-used {
+  color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.14);
+  border-color: rgba(255, 92, 92, 0.4);
+}
+.fx-badge-fresh {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+/* Star button in the card header (before the "..." menu). */
+.fx-star-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+.fx-star {
+  background: transparent;
+  border: none;
+  padding: 0.15rem 0.25rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: #555555;
+  cursor: pointer;
+}
+.fx-star:hover { color: #f5b301; }
+.fx-star.fx-starred { color: #f5b301; }
+
+/* Card hidden by the starred-only filter. */
+.fx-hidden-card { display: none !important; }
