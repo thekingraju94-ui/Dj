@@ -28,6 +28,15 @@
  *      in localStorage (key "firex_starred") so they survive reloads.
  *      A "Starred only" toggle shows only starred numbers, so at a glance
  *      you can tell which numbers are used (starred) and which are not.
+ *   3. PER-ACCOUNT DATA + ACCOUNT SELECTOR (2026-11-18, user order) —
+ *      stars and the active keyword are stored PER Firebase account (not
+ *      globally): whatever account is logged in / open in the panel, its
+ *      own stars and keyword apply, and switching accounts shows that
+ *      account's own stars. A "Saved Firebase" selector sits beside the
+ *      checker and lists every saved Firebase account; picking one
+ *      switches the WHOLE panel to that account (via the panel's own
+ *      share link, which now opens an already-saved account instead of
+ *      dumping to the dashboard).
  *
  * DATA FLOW (step by step)
  *   a. Accounts: read localStorage "flixy_accounts" (the panel's own key),
@@ -78,8 +87,13 @@
     "swiggy", "blinkit", "meesho", "bigbasket", "ajio"];
 
   var LS_ACCOUNTS = "flixy_accounts";   // the panel's own accounts key
-  var LS_STARRED = "firex_starred";     // JSON array of starred device ids
-  var LS_KEYWORD = "firex_checker_kw";  // last active keyword (persisted)
+  // Per-account storage (2026-11-18): stars + keyword are stored as a MAP
+  // keyed by the account's Firebase URL, so each logged-in account keeps
+  // its OWN stars and keyword. Old flat values (a plain array for stars,
+  // a plain string for the keyword) are migrated to the current account
+  // on first read, so nothing the user already starred is lost.
+  var LS_STARRED = "firex_starred";     // {firebaseUrl: [deviceId, ...]}
+  var LS_KEYWORD = "firex_checker_kw";  // {firebaseUrl: keyword}
 
   var SMS_LIMIT = 150;                  // SMS per device (panel uses the same)
   var FETCH_BATCH = 8;                  // parallel message fetches
@@ -99,6 +113,7 @@
   var state = {
     accounts: [],          // normalised {url, key, label} list
     accountIndex: 0,       // which account the checker is using
+    accountPicked: false,  // the panel's open account has been identified
     keyword: "",           // active keyword ("" = checker idle)
     checking: false,       // a scan is running right now
     progress: { done: 0, total: 0 },
@@ -150,6 +165,54 @@
 
   function activeAccount() {
     return state.accounts[state.accountIndex] || null;
+  }
+
+  // Stable per-account key for the per-account maps: the Firebase URL,
+  // lower-cased and without a trailing slash. Two saved entries for the
+  // same Firebase (different key) share one stars/keyword entry, which
+  // is what the user wants — the data belongs to the Firebase, not to
+  // the saved-entry row.
+  function accountKey(acct) {
+    return (acct && acct.url ? acct.url : "").toLowerCase();
+  }
+
+  // Read a per-account map from localStorage. Returns {} when missing or
+  // broken. A legacy flat value (array for stars, string for keyword) is
+  // migrated to the CURRENT account's entry so old data is not lost.
+  function readAccountMap(lsKey, legacyKind) {
+    var map = {};
+    try {
+      var raw = JSON.parse(localStorage.getItem(lsKey) || "null");
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) map = raw;
+      else if (legacyKind === "array" && Array.isArray(raw)) {
+        var k = accountKey(activeAccount());
+        if (k) map[k] = raw;
+      } else if (legacyKind === "string" && typeof raw === "string") {
+        var k2 = accountKey(activeAccount());
+        if (k2) map[k2] = raw;
+      }
+    } catch (e) { map = {}; }
+    return map;
+  }
+
+  function writeAccountMap(lsKey, map) {
+    try { localStorage.setItem(lsKey, JSON.stringify(map)); } catch (e) {}
+  }
+
+  // Switch the WHOLE panel to another saved Firebase account. The panel
+  // is a React app whose state is not reachable from this addon, so the
+  // switch goes through the panel's own share link (?s=<base64>), which
+  // (after the 2026-11-18 fix) opens an already-saved account instead of
+  // dumping to the dashboard. The page reloads onto that account.
+  // Payload format is the panel's own: url|||key|||timestamp|||name
+  // (base64 — the FirexPanel encoding, NOT the ZXKAI XOR encoding).
+  function switchToAccount(idx) {
+    var acct = state.accounts[idx];
+    if (!acct) return;
+    var payload = [acct.url, acct.key, String(Date.now()), acct.label].join("|||");
+    var encoded = "";
+    try { encoded = btoa(payload); } catch (e) { return; }
+    window.location.href = window.location.pathname + "?s=" + encoded;
   }
 
   /* ------------------------------------------------------------------ */
@@ -259,31 +322,73 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 7. Stars — persisted per device id in localStorage                   */
+  /* 7. Stars — persisted PER Firebase account in localStorage           */
   /* ------------------------------------------------------------------ */
 
+  // Stars for the CURRENT account only. The map is re-read from
+  // localStorage whenever the account changes, so switching accounts
+  // shows that account's own stars.
   function readStarred() {
-    try {
-      var raw = JSON.parse(localStorage.getItem(LS_STARRED) || "[]");
-      var set = {};
-      if (Array.isArray(raw)) raw.forEach(function (id) { set[id] = true; });
-      return set;
-    } catch (e) { return {}; }
+    var map = readAccountMap(LS_STARRED, "array");
+    var k = accountKey(activeAccount());
+    var set = {};
+    var list = (k && Array.isArray(map[k])) ? map[k] : [];
+    list.forEach(function (id) { set[id] = true; });
+    return set;
   }
 
   function writeStarred(set) {
-    try {
-      localStorage.setItem(LS_STARRED, JSON.stringify(Object.keys(set)));
-    } catch (e) { /* private mode etc. — stars just don't persist */ }
+    var map = readAccountMap(LS_STARRED, "array");
+    var k = accountKey(activeAccount());
+    if (!k) return;
+    map[k] = Object.keys(set);
+    writeAccountMap(LS_STARRED, map);
   }
 
-  var starred = readStarred();
+  // The starred set for the account the checker is currently using.
+  // Re-loaded by setAccount() whenever the account changes.
+  var starred = {};
+
+  function loadStarredForCurrentAccount() {
+    starred = readStarred();
+  }
 
   function toggleStar(deviceId) {
     if (starred[deviceId]) delete starred[deviceId];
     else starred[deviceId] = true;
     writeStarred(starred);
     decorateCards(); // re-render this card's star + re-apply the filter
+  }
+
+  // Switch the checker's account (stars + keyword + SMS cache) to idx.
+  // Used by pickAccountByCards() at boot and by the account selector.
+  function setAccount(idx) {
+    state.accountIndex = idx;
+    state.smsCache = {};
+    state.used = {};
+    state.fresh = {};
+    loadStarredForCurrentAccount();
+    state.keyword = readKeywordForCurrentAccount();
+    updateActivePill();
+    updateCounts();
+    decorateCards();
+    var sel = $("#fx-acc-select");
+    if (sel) sel.value = String(idx);
+  }
+
+  function readKeywordForCurrentAccount() {
+    var map = readAccountMap(LS_KEYWORD, "string");
+    var k = accountKey(activeAccount());
+    return (k && typeof map[k] === "string") ? map[k] : "";
+  }
+
+  function writeKeywordForCurrentAccount(kw) {
+    var map = readAccountMap(LS_KEYWORD, "string");
+    var k = accountKey(activeAccount());
+    if (!k) return;
+    if (kw) map[k] = kw;
+    else delete map[k];
+    writeAccountMap(LS_KEYWORD, map);
   }
 
   /* ------------------------------------------------------------------ */
@@ -324,7 +429,7 @@
     }
     if (state.checking) return; // one scan at a time
     state.keyword = keyword;
-    try { localStorage.setItem(LS_KEYWORD, keyword); } catch (e) {}
+    writeKeywordForCurrentAccount(keyword); // per-account, not global
     state.checking = true;
     state.used = {};
     state.fresh = {};
@@ -378,7 +483,7 @@
     state.keyword = "";
     state.used = {};
     state.fresh = {};
-    try { localStorage.removeItem(LS_KEYWORD); } catch (e) {}
+    writeKeywordForCurrentAccount(""); // clears this account's keyword
     var input = $("#fx-checker-custom");
     if (input) input.value = "";
     updateActivePill();
@@ -473,11 +578,17 @@
     row.appendChild(starToggle);
     sec.appendChild(row);
 
-    // Account picker (only when several accounts are saved).
-    if (state.accounts.length > 1) {
+    // Saved-Firebase selector — ALWAYS shown when any account is saved
+    // (not only when several exist), sitting right beside the checker so
+    // the user can switch Firebase accounts without going back to the
+    // dashboard. Picking an account switches the WHOLE panel to it (via
+    // the panel's own share link — the page reloads onto that account),
+    // and that account's own stars + keyword then apply.
+    if (state.accounts.length >= 1) {
       var accRow = el("div", "fx-checker-accrow");
-      accRow.appendChild(el("span", "fx-acc-label", "Account:"));
+      accRow.appendChild(el("span", "fx-acc-label", "Saved Firebase:"));
       var sel = el("select", "fx-acc-select");
+      sel.id = "fx-acc-select";
       state.accounts.forEach(function (a, idx) {
         var opt = el("option", "", a.label);
         opt.value = String(idx);
@@ -485,9 +596,9 @@
       });
       sel.value = String(state.accountIndex);
       sel.addEventListener("change", function () {
-        state.accountIndex = parseInt(sel.value, 10) || 0;
-        state.smsCache = {};
-        if (state.keyword) runCheck(state.keyword);
+        var idx = parseInt(sel.value, 10) || 0;
+        if (idx === state.accountIndex) return;
+        switchToAccount(idx);
       });
       accRow.appendChild(sel);
       sec.appendChild(accRow);
@@ -609,17 +720,22 @@
 
   function boot() {
     state.accounts = readAccounts();
-    try {
-      state.keyword = localStorage.getItem(LS_KEYWORD) || "";
-    } catch (e) { state.keyword = ""; }
+    // Stars + keyword belong to the CURRENT account (per-account maps).
+    loadStarredForCurrentAccount();
+    state.keyword = readKeywordForCurrentAccount();
 
     // Auto-pick the account whose devices match the cards on screen
     // (the panel's active account). Falls back to the first account.
-    // Runs once at boot: if the current account's devices do not match
-    // the screen, the other accounts are tried in order until one does.
+    // Runs at boot AND retried by the interval until it finds a match:
+    // at boot the panel may not have rendered its cards yet (the numbers
+    // view loads async), so a single boot-time pass can see an empty
+    // grid and give up. Retrying is what makes the selector show the
+    // account the panel actually opened after a share-link switch.
+    var picking = false; // a pick is already in flight — do not overlap
     function pickAccountByCards() {
       var grid = findGrid();
       if (!grid || state.accounts.length <= 1) return;
+      if (picking) return;
       var onScreen = {};
       $all(":scope > div", grid).forEach(function (card) {
         var id = cardDeviceId(card);
@@ -633,21 +749,23 @@
       state.accounts.forEach(function (a, idx) {
         if (idx !== current) order.push(idx);
       });
+      picking = true;
       var p = Promise.resolve(false);
       order.forEach(function (idx) {
         p = p.then(function (found) {
           if (found) return true;
           return fetchClients(state.accounts[idx]).then(function (devices) {
             if (devices.some(function (d) { return onScreen[d.id]; })) {
-              state.accountIndex = idx;
-              state.smsCache = {};
+              // The panel's open account is idx — load ITS stars/keyword.
+              setAccount(idx);
+              state.accountPicked = true;
               return true;
             }
             return false;
           }).catch(function () { return false; });
         });
       });
-      p.catch(function () {});
+      p.catch(function () {}).then(function () { picking = false; });
     }
 
     ensureChecker();
@@ -671,15 +789,21 @@
           decoTimer = null;
           ensureChecker();
           decorateCards();
+          // Cards may have just rendered — retry the account pick if
+          // the panel's open account is still unidentified.
+          if (!state.accountPicked) pickAccountByCards();
         }, 150);
       });
       obs.observe(root, { childList: true, subtree: true });
     }
     // Safety net: a light interval in case the observer misses a render.
     // (5s, not 3s — the observer now handles the fast path.)
+    // It also retries the account pick until the panel's open account is
+    // identified (the boot-time pick can run before the cards render).
     setInterval(function () {
       ensureChecker();
       decorateCards();
+      if (!state.accountPicked) pickAccountByCards();
     }, 5000);
   }
 

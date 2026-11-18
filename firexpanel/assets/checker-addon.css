@@ -164,7 +164,9 @@
   background: rgba(245, 179, 1, 0.10);
 }
 
-/* Account picker (only shown when several accounts are saved). */
+/* Saved-Firebase selector — always shown when any account is saved,
+   sitting beside the checker so the user can switch accounts without
+   going back to the dashboard. */
 .fx-checker-accrow {
   display: flex;
   align-items: center;
