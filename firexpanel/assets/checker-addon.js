@@ -94,6 +94,12 @@
   // on first read, so nothing the user already starred is lost.
   var LS_STARRED = "firex_starred";     // {firebaseUrl: [deviceId, ...]}
   var LS_KEYWORD = "firex_checker_kw";  // {firebaseUrl: keyword}
+  // The ONE selector's choice (2026-11-18, user order): the Firebase URL
+  // the user picked in the Saved Firebase selector. The checker works
+  // ONLY on this logged-in Firebase — never on any other saved account.
+  // It is the checker's starting account at boot; the card-match pick
+  // only corrects it if the panel actually opened a different account.
+  var LS_SELECTED = "firex_selected_account"; // firebaseUrl string
 
   var SMS_LIMIT = 150;                  // SMS per device (panel uses the same)
   var FETCH_BATCH = 8;                  // parallel message fetches
@@ -206,13 +212,30 @@
   // dumping to the dashboard. The page reloads onto that account.
   // Payload format is the panel's own: url|||key|||timestamp|||name
   // (base64 — the FirexPanel encoding, NOT the ZXKAI XOR encoding).
+  // The choice is saved first (LS_SELECTED), so after the reload the
+  // checker starts on THIS account — the one the selector logged into —
+  // and the fresh/used scan runs only on it.
   function switchToAccount(idx) {
     var acct = state.accounts[idx];
     if (!acct) return;
+    try { localStorage.setItem(LS_SELECTED, accountKey(acct)); } catch (e) {}
     var payload = [acct.url, acct.key, String(Date.now()), acct.label].join("|||");
     var encoded = "";
     try { encoded = btoa(payload); } catch (e) { return; }
     window.location.href = window.location.pathname + "?s=" + encoded;
+  }
+
+  // The account the selector last logged into (persisted URL). Returns
+  // its index in state.accounts, or -1 when there is none / it is gone.
+  function persistedSelectedIndex() {
+    try {
+      var url = (localStorage.getItem(LS_SELECTED) || "").toLowerCase();
+      if (!url) return -1;
+      for (var i = 0; i < state.accounts.length; i++) {
+        if (accountKey(state.accounts[i]) === url) return i;
+      }
+    } catch (e) {}
+    return -1;
   }
 
   /* ------------------------------------------------------------------ */
@@ -364,6 +387,9 @@
   // Used by pickAccountByCards() at boot and by the account selector.
   function setAccount(idx) {
     state.accountIndex = idx;
+    // Remember this as the selector's logged-in account, so the checker
+    // keeps working only on it after a reload.
+    try { localStorage.setItem(LS_SELECTED, accountKey(activeAccount())); } catch (e) {}
     state.smsCache = {};
     state.used = {};
     state.fresh = {};
@@ -720,6 +746,12 @@
 
   function boot() {
     state.accounts = readAccounts();
+    // Start on the account the selector last logged into (LS_SELECTED),
+    // so the checker works only on that logged-in Firebase from the
+    // first paint. The card-match pick below only corrects this if the
+    // panel actually opened a different account.
+    var selIdx = persistedSelectedIndex();
+    if (selIdx >= 0) state.accountIndex = selIdx;
     // Stars + keyword belong to the CURRENT account (per-account maps).
     loadStarredForCurrentAccount();
     state.keyword = readKeywordForCurrentAccount();
