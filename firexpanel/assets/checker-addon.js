@@ -153,6 +153,8 @@
 
   // Normalised exactly like the panel does (see its V0() helper):
   // url = url || firebaseUrl, key = key || apiKey || name.
+  // The key may be empty (a public Firebase needs no auth) — an account
+  // with a URL but no key is still usable, so the filter keeps it.
   function readAccounts() {
     try {
       var raw = JSON.parse(localStorage.getItem(LS_ACCOUNTS) || "[]");
@@ -163,8 +165,95 @@
           key: a.key || a.apiKey || a.name || "",
           label: a.firebaseUrl || a.url || a.name || "Firebase",
         };
-      }).filter(function (a) { return a.url && a.key; });
+      }).filter(function (a) { return !!a.url; });
     } catch (e) { return []; }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 4b. Live-account detection — the DEEP fix (2026-11-19)               */
+  /* ------------------------------------------------------------------ */
+  // The checker used to read the logged-in Firebase ONLY from
+  // localStorage "flixy_accounts". But the panel can be CONNECTED
+  // (showing devices, "Connected" in the top bar) while that key is
+  // empty — e.g. logged in via a share link that never saved to
+  // localStorage, or a deployment whose storage differs. The checker
+  // then said "Pehle panel me apna Firebase account connect karo."
+  // even though the panel was Connected with devices on screen
+  // (screenshot 2026-11-19 00:36, firexpanel.com: 19 devices, 3 online).
+  // Fix: snoop the Firebase URL the panel ITSELF fetches from (its
+  // /clients.json and /messages calls) and treat THAT as the live
+  // account. The panel auto-refreshes every ~15s, so the live account
+  // is captured quickly even if the first fetch happened before this
+  // addon loaded. This makes the checker follow the panel's real
+  // connection instead of trusting localStorage alone.
+  var liveAccount = null; // {url, key, label} captured from panel fetches
+
+  function registerLiveAccount(url, key) {
+    if (!url) return;
+    url = String(url).replace(/\/$/, "");
+    var k = key || "";
+    if (liveAccount && liveAccount.url === url && liveAccount.key === k) return;
+    liveAccount = { url: url, key: k, label: url };
+    // Make the live account visible to the per-account logic: add it to
+    // state.accounts (in-memory only) if it is not there, and make it
+    // the active account. Per-account stars/keyword then key off the
+    // live Firebase URL, which is the Firebase actually logged in.
+    var idx = -1;
+    state.accounts.forEach(function (a, i) {
+      if (String(a.url).replace(/\/$/, "") === url) idx = i;
+    });
+    if (idx === -1) {
+      state.accounts.push(liveAccount);
+      idx = state.accounts.length - 1;
+    }
+    if (state.accountIndex !== idx) {
+      setAccount(idx);
+    } else {
+      loadStarredForCurrentAccount();
+      state.keyword = readKeywordForCurrentAccount();
+      updateActivePill();
+      updateCounts();
+      decorateCards();
+    }
+    // If the checker was showing "connect karo", clear it now — the
+    // account is here, the user just needs to pick a keyword.
+    var st = $("#fx-checker-status");
+    if (st && st.textContent.indexOf("Pehle panel") === 0) {
+      setStatusLine(state.keyword
+        ? 'Active: "' + state.keyword + '" — Refresh dabao ya keyword dobara chuno.'
+        : "Account mil gaya — keyword chuno ya Search Now dabao.");
+    }
+  }
+
+  // Wrap window.fetch once, to capture the Firebase RTDB the panel is
+  // actually using. Only data paths (/clients.json, /messages/...) are
+  // recorded; everything else passes through untouched. Never breaks
+  // the panel's fetch — any error in the spy is swallowed and the
+  // original fetch still runs.
+  function installFetchSpy() {
+    if (typeof window.fetch !== "function") return;
+    if (window.fetch.__fxSpy) return; // already wrapped
+    var origFetch = window.fetch.bind(window);
+    function spyFetch(input, init) {
+      try {
+        var urlStr = (typeof input === "string") ? input : (input && input.url) || "";
+        // Real Firebase: the RTDB host is the URL host, e.g.
+        // https://<db>.firebaseio.com/clients.json
+        // Mock (local test server): the RTDB host is a path prefix, e.g.
+        // http://127.0.0.1:8902/firebasedatabase.app/clients.json
+        // Both are accepted; m[1] is the Firebase base URL either way.
+        var m = urlStr.match(/^(https?:\/\/[^\/]+\.(?:firebaseio\.com|firebasedatabase\.app))(\/.*)?$/i)
+          || urlStr.match(/^(https?:\/\/[^\/]+\/(?:firebaseio\.com|firebasedatabase\.app))(\/.*)?$/i);
+        if (m && /\/clients\.json|\/messages\//.test(urlStr)) {
+          var auth = "";
+          try { auth = new URL(urlStr).searchParams.get("auth") || ""; } catch (e) { auth = ""; }
+          registerLiveAccount(m[1], auth);
+        }
+      } catch (e) { /* never break the panel's fetch */ }
+      return origFetch(input, init);
+    }
+    spyFetch.__fxSpy = true;
+    window.fetch = spyFetch;
   }
 
   function activeAccount() {
@@ -208,9 +297,14 @@
   /* ------------------------------------------------------------------ */
 
   function fbUrl(base, key, path, params) {
-    var q = new URLSearchParams({ auth: key });
+    // A public Firebase needs no auth: omit the auth param entirely
+    // when the key is empty (an empty auth= can be rejected), instead
+    // of sending a blank token.
+    var q = new URLSearchParams();
+    if (key) q.set("auth", key);
     if (params) Object.keys(params).forEach(function (k) { q.set(k, params[k]); });
-    return base + "/" + path + ".json?" + q.toString();
+    var qs = q.toString();
+    return base + "/" + path + ".json" + (qs ? "?" + qs : "");
   }
 
   // Firebase GET with a hard timeout. The panel's own fetch helper aborts
@@ -720,6 +814,9 @@
   /* ------------------------------------------------------------------ */
 
   function boot() {
+    // Install the fetch spy FIRST so the panel's own Firebase fetches
+    // are captured from the start (live-account detection, 2026-11-19).
+    installFetchSpy();
     state.accounts = readAccounts();
     // No persisted choice: the checker starts on the first account and
     // the card-match pick below identifies the Firebase actually logged
@@ -810,6 +907,22 @@
       if (!state.accountPicked) pickAccountByCards();
     }, 5000);
   }
+
+  // Read-only debug hook (helps verify the live-account detection):
+  // window.__fxChecker.liveAccountUrl is the Firebase the panel is
+  // actually fetching from, or "" when none has been captured yet.
+  // window.__fxChecker.accountCount is how many accounts the checker
+  // knows about (localStorage + live). No keys or SMS are exposed.
+  try {
+    Object.defineProperty(window, "__fxChecker", {
+      value: {
+        get liveAccountUrl() { return liveAccount ? liveAccount.url : ""; },
+        get accountCount() { return state.accounts.length; },
+        get activeUrl() { var a = activeAccount(); return a ? a.url : ""; },
+      },
+      configurable: true,
+    });
+  } catch (e) { /* old browsers — debug hook is optional */ }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
