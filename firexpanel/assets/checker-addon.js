@@ -556,7 +556,7 @@
       }
     });
     row.appendChild(input);
-    var go = el("button", "fx-go", "Search");
+    var go = el("button", "fx-go", "Search Now");
     go.id = "fx-checker-go";
     go.type = "button";
     go.addEventListener("click", function () { runCheck(input.value); });
